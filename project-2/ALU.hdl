@@ -1,0 +1,68 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/2/ALU.hdl
+/**
+ * ALU (Arithmetic Logic Unit):
+ * Computes out = one of the following functions:
+ *                0, 1, -1,
+ *                x, y, !x, !y, -x, -y,
+ *                x + 1, y + 1, x - 1, y - 1,
+ *                x + y, x - y, y - x,
+ *                x & y, x | y
+ * on the 16-bit inputs x, y,
+ * according to the input bits zx, nx, zy, ny, f, no.
+ * In addition, computes the two output bits:
+ * if (out == 0) zr = 1, else zr = 0
+ * if (out < 0)  ng = 1, else ng = 0
+ */
+// Implementation: Manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) sets x = 0        // 16-bit constant
+// if (nx == 1) sets x = !x       // bitwise not
+// if (zy == 1) sets y = 0        // 16-bit constant
+// if (ny == 1) sets y = !y       // bitwise not
+// if (f == 1)  sets out = x + y  // integer 2's complement addition
+// if (f == 0)  sets out = x & y  // bitwise and
+// if (no == 1) sets out = !out   // bitwise not
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute (out = x + y) or (out = x & y)?
+        no; // negate the out output?
+    OUT 
+        out[16], // 16-bit output
+        zr,      // if (out == 0) equals 1, else 0
+        ng;      // if (out < 0)  equals 1, else 0
+
+    PARTS:
+    // Step 1: Preprocessing x
+    Mux16(a=x, b=false, sel=zx, out=newx1);  // Set x to 0 if zx is 1
+    Not16(in=newx1, out=notnewx1);            // Compute !x
+    Mux16(a=newx1, b=notnewx1, sel=nx, out=newx2);  // Select x or !x
+
+    // Step 2: Preprocessing y
+    Mux16(a=y, b=false, sel=zy, out=newy1);  // Set y to 0 if zy is 1
+    Not16(in=newy1, out=notnewy1);            // Compute !y
+    Mux16(a=newy1, b=notnewy1, sel=ny, out=newy2);  // Select y or !y
+
+    // Step 3: Compute result (Addition or AND)
+    Add16(a=newx2, b=newy2, out=fa);  // x + y
+    And16(a=newx2, b=newy2, out=ba);  // x & y
+    Mux16(a=ba, b=fa, sel=f, out=newout);  // Select AND or ADD
+
+    // Step 4: Post-processing output (Negate if no == 1)
+    Not16(in=newout, out=notnewout);
+    Mux16(a=newout, b=notnewout, sel=no, out=out, out[15]=ng, out[0..7]=zrl, out[8..15]=zru); //Uses a 16-bit multiplexer (Mux16) to select between newout and notnewout, depending on the no bit
+
+    // Step 5: Compute zero flag
+    Or8Way(in=zrl, out=zr1); //ORs the lower 8 bits (out[0..7]) to see if any are 1
+    Or8Way(in=zru, out=zr2); //ORs the upper 8 bits (out[8..15]) to see if any are 1.
+    Or(a=zr1, b=zr2, out=zrn); //Combines both OR results; zrn == 1 means at least one bit in out is 1, meaning the result is not zero.
+    Not(in=zrn, out=zr); //Negates zrn; if zrn == 0, then zr == 1, meaning the output is exactly 0.
+}
